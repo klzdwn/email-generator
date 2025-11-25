@@ -1,38 +1,18 @@
-// api/message.js
-// GET /api/message?id=<messageId>&token=<token>
-// Returns full message detail (text/html) forwarded from mail.tm
+// /api/message.js — Read individual messages
 export default async function handler(req, res) {
-  const id = req.query.id;
-  const token = req.query.token || (req.headers.authorization && req.headers.authorization.split(" ")[1]);
+  const { login, domain, id } = req.query;
 
-  if (!id) return res.status(400).json({ error: "id required" });
-  if (!token) return res.status(400).json({ error: "token required (query ?token= or Authorization: Bearer <token>)" });
+  if (!login || !domain || !id) {
+    return res.status(400).json({ error: "missing_params" });
+  }
+
+  const url = `https://www.1secmail.com/api/v1/?action=readMessage&login=${login}&domain=${domain}&id=${id}`;
 
   try {
-    const resp = await fetch(`https://api.mail.tm/messages/${encodeURIComponent(id)}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-
-    if (!resp.ok) {
-      const txt = await resp.text();
-      return res.status(resp.status).json({ error: "mail.tm error", detail: txt });
-    }
-
-    const data = await resp.json();
-
-    // return relevant fields; mail.tm returns text and html fields
-    return res.status(200).json({
-      id: data.id,
-      from: data.from,
-      to: data.to,
-      subject: data.subject,
-      intro: data.intro,
-      text: data.text || "",
-      html: data.html || "",
-      createdAt: data.createdAt,
-    });
-  } catch (err) {
-    console.error("message error", err);
-    return res.status(500).json({ error: "server error", detail: String(err) });
+    const r = await fetch(url);
+    const data = await r.json();
+    res.status(200).json({ message: data });
+  } catch (e) {
+    res.status(500).json({ error: "read_failed", detail: String(e) });
   }
 }
