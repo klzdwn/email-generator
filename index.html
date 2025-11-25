@@ -1,12 +1,29 @@
-<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Email Generator</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TempMail</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="container">
+  <h1 class="title">TempMail</h1>
+
+  <div class="email-box">
+    <button id="genBtn">Generate Email</button>
+
+    <div id="emailContainer" class="hidden">
+      <p><strong>Email:</strong> <span id="email"></span></p>
+      <button id="copyBtn">Copy</button>
+    </div>
+  </div>
+
+  <h2>Inbox</h2>
+  <div id="inbox">No messages.</div>
+</div>
+
+<script src="app.js"></script>
+</body>
 </html>
