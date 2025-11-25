@@ -3,42 +3,42 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>TempMail (1secmail demo)</title>
+  <title>TempMail (mail.tm) - Demo</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <header>
-    <h1>TempMail</h1>
-  </header>
+  <main class="container">
+    <h1>TempMail (mail.tm)</h1>
 
-  <main class="card">
-    <button id="genBtn" class="primary">Generate Email</button>
-    <div id="addressBox" class="address" style="display:none;">
-      <div><strong>Address:</strong> <span id="addressText"></span></div>
-      <div class="controls">
-        <button id="copyBtn" style="display:none;">Copy address</button>
-        <button id="newBtn" style="display:none;">New</button>
-      </div>
+    <div id="controls" class="card">
+      <button id="createBtn">Create mailbox</button>
+      <button id="deleteBtn" class="secondary">Delete mailbox</button>
+      <button id="copyBtn" class="secondary">Copy address</button>
+      <label><input type="checkbox" id="pollCheckbox" checked/> Poll</label>
+      <button id="fetchBtn" class="secondary">Fetch</button>
     </div>
 
-    <section id="inbox">
-      <h2>Inbox</h2>
-      <div id="status" class="muted"></div>
-      <div id="inboxList">No messages.</div>
+    <section id="info" class="card">
+      <div><strong>Address:</strong> <span id="address">-</span></div>
+      <div><strong>Password:</strong> <span id="password">-</span></div>
+      <div><strong>Token:</strong> <span id="token">-</span></div>
     </section>
 
-    <div id="viewer" class="viewer" style="display:none;">
-      <h3 id="mSub"></h3>
-      <div><strong>From:</strong> <span id="mFrom"></span></div>
-      <div><strong>OTP:</strong> <span id="mOtp">-</span></div>
-      <div id="mBody" class="body"></div>
-      <div class="viewerActions">
-        <button id="closeMsg">Close</button>
-        <button id="downloadMsg">Download .txt</button>
+    <section id="inbox" class="card">
+      <h2>Inbox</h2>
+      <div id="messages">
+        <p class="muted">No messages yet.</p>
       </div>
-    </div>
+      <div id="otpArea" class="card hidden">
+        <h3>Detected OTP</h3>
+        <div id="otpValue" class="otp"></div>
+      </div>
+    </section>
 
-    <p class="debug">Debug mode: shows short error details for troubleshooting.</p>
+    <section id="debug" class="card">
+      <h3>Debug</h3>
+      <pre id="debugLog">Ready.</pre>
+    </section>
   </main>
 
   <script src="app.js"></script>
