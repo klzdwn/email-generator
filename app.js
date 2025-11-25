@@ -75,7 +75,14 @@ async function deleteMailbox(){
   stopPolling();
   messagesEl.innerHTML='No messages.';
 }
-
+// jika belum ada, tambahin stub supaya tidak crash
+async function deleteMailbox(){ showToast('Delete not implemented'); }
+function copyAddress(){ navigator.clipboard?.writeText(current.address||''); showToast('Copied'); }
+async function fetchMessages(){ showToast('Fetching...'); }
+function startPolling(){ /* kode polling lo */ }
+function stopPolling(){ /* stop polling */ }
+function toggleTheme(){ /* toggle class di body */ 
+}
 async function fetchMessages(){
   messagesEl.innerHTML = 'Loading...';
   if(!current.token){ messagesEl.innerHTML='No token. Create mailbox first.'; return; }
