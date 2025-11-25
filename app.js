@@ -28,15 +28,17 @@ let current = {
 };
 
 function logDebug(...args){
+  // guard debugEl exists
+  if(!debugEl) return;
   const s = args.map(a => typeof a === 'string' ? a : JSON.stringify(a,null,2)).join(' ');
   debugEl.textContent = `${new Date().toLocaleTimeString()} - ${s}\n` + debugEl.textContent;
 }
 
 // ui refresh
 function refreshUI(){
-  addressEl.textContent = current.address || '-';
-  passwordEl.textContent = current.password ? '••••••••' : '-';
-  tokenEl.textContent = current.token ? (current.token.slice(0,22) + '…') : '-';
+  if(addressEl) addressEl.textContent = current.address || '-';
+  if(passwordEl) passwordEl.textContent = current.password ? '••••••••' : '-';
+  if(tokenEl) tokenEl.textContent = current.token ? (current.token.slice(0,22) + '…') : '-';
 }
 
 // helper fetch that returns {ok,status,body,raw}
@@ -74,7 +76,7 @@ function randLocal(len=8){
 }
 
 async function createMailbox(){
-  debugEl.textContent = '';
+  if(debugEl) debugEl.textContent = '';
   logDebug('creating mailbox…');
   // domains
   const dres = await fetchJson(API_BASE + '/domains');
@@ -163,6 +165,7 @@ async function fetchMessages(){
     logDebug('no token, cannot fetch messages');
     return;
   }
+  if(!messagesEl) return;
   messagesEl.innerHTML = '<p class="muted">Loading messages…</p>';
   const res = await fetchJson(API_BASE + '/messages', {
     headers: { Authorization: `Bearer ${current.token}` }
@@ -175,7 +178,7 @@ async function fetchMessages(){
   const list = Array.isArray(res.body['hydra:member']) ? res.body['hydra:member'] : (Array.isArray(res.body) ? res.body : []);
   if(!list.length){
     messagesEl.innerHTML = `<p class="muted">No messages yet.</p>`;
-    otpArea.classList.add('hidden');
+    if(otpArea) otpArea.classList.add('hidden');
     return;
   }
   messagesEl.innerHTML = '';
@@ -184,26 +187,66 @@ async function fetchMessages(){
     const div = document.createElement('div');
     div.className = 'message';
     const from = m.from ? (m.from.address || m.from) : 'unknown';
+    // ensure unique id safe (some mail.tm ids contain slashes - replace)
+    const safeId = String(m.id).replace(/[^\w-]/g,'_');
     div.innerHTML = `<div><strong>${m.subject || '(no subject)'}</strong></div>
                      <div class="muted">From: ${from} — ${new Date(m.createdAt).toLocaleString()}</div>
-                     <div id="body-${m.id}" class="msg-body muted">Loading body…</div>
-                     <button data-id="${m.id}" class="viewBtn">View</button>`;
+                     <div id="body-${safeId}" class="msg-body muted">Loading body…</div>
+                     <button data-id="${safeId}" data-rawid="${m.id}" class="viewBtn">View</button>`;
     messagesEl.appendChild(div);
 
-    // prefetch body not always returned, so fetch each message body
+    // prefetch body in background (non-blocking)
     (async ()=>{
-      const b = await fetchJson(API_BASE + `/messages/${m.id}`, { headers: { Authorization: `Bearer ${current.token}` } });
-      logDebug('message body', b);
-      const bodyEl = document.getElementById(`body-${m.id}`);
-      if(b.ok && b.body){
-        const text = b.body.html || b.body.text || JSON.stringify(b.body);
-        bodyEl.innerHTML = text;
-        detectOtp(text);
-      } else {
-        bodyEl.innerHTML = `<span class="muted">Failed to load message</span>`;
+      try{
+        const b = await fetchJson(API_BASE + `/messages/${m.id}`, { headers: { Authorization: `Bearer ${current.token}` } });
+        logDebug('message body', b);
+        const bodyEl = document.getElementById(`body-${safeId}`);
+        if(b.ok && b.body){
+          const text = b.body.html || b.body.text || JSON.stringify(b.body);
+          // insert sanitized html/text depending on what you want:
+          // if it's html, you can set innerHTML (be careful); here we set as-is (mail.tm html is usually safe-ish)
+          bodyEl.innerHTML = text;
+          detectOtp(text);
+        } else {
+          bodyEl.innerHTML = `<span class="muted">Failed to load message</span>`;
+        }
+      }catch(e){
+        logDebug('prefetch body error', String(e));
+        const bodyEl = document.getElementById(`body-${safeId}`);
+        if(bodyEl) bodyEl.innerHTML = `<span class="muted">Failed to load message</span>`;
       }
     })();
   }
+
+  // attach view handlers (delegation)
+  messagesEl.querySelectorAll('.viewBtn').forEach(btn=>{
+    btn.addEventListener('click', async (ev)=>{
+      const safeId = btn.getAttribute('data-id');
+      const rawId = btn.getAttribute('data-rawid');
+      const bodyEl = document.getElementById(`body-${safeId}`);
+      if(!bodyEl) return;
+      // if body already contains full html and not "Loading", toggle visibility
+      if(!bodyEl.classList.contains('loaded')){
+        // try fetch body in case prefetch missed
+        btn.disabled = true;
+        const b = await fetchJson(API_BASE + `/messages/${rawId}`, { headers: { Authorization: `Bearer ${current.token}` } });
+        if(b.ok && b.body){
+          const text = b.body.html || b.body.text || JSON.stringify(b.body);
+          bodyEl.innerHTML = text;
+          bodyEl.classList.add('loaded');
+          detectOtp(text);
+          btn.textContent = 'Hide';
+        } else {
+          bodyEl.innerHTML = `<span class="muted">Failed to load message</span>`;
+        }
+        btn.disabled = false;
+      } else {
+        // toggle hide/show
+        const isHidden = bodyEl.classList.toggle('hidden');
+        btn.textContent = isHidden ? 'View' : 'Hide';
+      }
+    });
+  });
 }
 
 // detect OTP from a text/html blob
@@ -216,8 +259,8 @@ function detectOtp(text){
   // regex: 4-8 digit sequences (common OTP lengths)
   const m = plain.match(/\b(\d{4,8})\b/);
   if(m){
-    otpArea.classList.remove('hidden');
-    otpValue.textContent = m[1];
+    if(otpArea) otpArea.classList.remove('hidden');
+    if(otpValue) otpValue.textContent = m[1];
     logDebug('OTP detected', m[1]);
   }
 }
@@ -225,7 +268,7 @@ function detectOtp(text){
 // polling
 function startPolling(){
   stopPolling();
-  if(!pollCheckbox.checked) return;
+  if(!pollCheckbox || !pollCheckbox.checked) return;
   pollInterval = setInterval(fetchMessages, 4000);
   fetchMessages();
   logDebug('polling started');
@@ -234,34 +277,41 @@ function stopPolling(){
   if(pollInterval) { clearInterval(pollInterval); pollInterval = null; logDebug('polling stopped'); }
 }
 
-// attach events
-createBtn.addEventListener('click', async ()=>{
-  createBtn.disabled = true;
-  const r = await createMailbox();
-  logDebug('create result', r);
-  if(!r.ok){
-    alert('Gagal membuat mailbox: ' + (r.error || JSON.stringify(r.detail)));
-    logDebug('create error', r);
-  } else {
-    refreshUI();
-  }
-  createBtn.disabled = false;
-});
-
-deleteBtn.addEventListener('click', async ()=>{
-  if(!confirm('Delete local mailbox data?')) return;
-  await deleteMailbox();
-});
-
-copyBtn.addEventListener('click', ()=>{
-  if(!current.address) return alert('No address');
-  navigator.clipboard.writeText(current.address).then(()=> alert('Copied'));
-});
-
-fetchBtn.addEventListener('click', ()=> fetchMessages());
-pollCheckbox.addEventListener('change', ()=> {
-  if(pollCheckbox.checked) startPolling(); else stopPolling();
-});
+// attach events (guard elements exist)
+if(createBtn){
+  createBtn.addEventListener('click', async ()=>{
+    createBtn.disabled = true;
+    const r = await createMailbox();
+    logDebug('create result', r);
+    if(!r.ok){
+      alert('Gagal membuat mailbox: ' + (r.error || JSON.stringify(r.detail)));
+      logDebug('create error', r);
+    } else {
+      refreshUI();
+    }
+    createBtn.disabled = false;
+  });
+}
+if(deleteBtn){
+  deleteBtn.addEventListener('click', async ()=>{
+    if(!confirm('Delete local mailbox data?')) return;
+    await deleteMailbox();
+  });
+}
+if(copyBtn){
+  copyBtn.addEventListener('click', ()=>{
+    if(!current.address) return alert('No address');
+    navigator.clipboard.writeText(current.address).then(()=> alert('Copied'));
+  });
+}
+if(fetchBtn){
+  fetchBtn.addEventListener('click', ()=> fetchMessages());
+}
+if(pollCheckbox){
+  pollCheckbox.addEventListener('change', ()=> {
+    if(pollCheckbox.checked) startPolling(); else stopPolling();
+  });
+}
 
 // on load: restore token => start polling
 (function init(){
@@ -271,11 +321,52 @@ pollCheckbox.addEventListener('change', ()=> {
     startPolling();
   }
 })();
-// --- debug hide/show ---
-const debugLog = document.querySelector('#debugLog');
-const toggleDebugBtn = document.querySelector('#toggleDebugBtn');
 
-toggleDebugBtn.addEventListener('click', () => {
-  const hidden = debugLog.classList.toggle('hidden');
-  toggleDebugBtn.textContent = hidden ? 'Show' : 'Hide';
-});
+// --- debug hide/show: safe setup ---
+// In some versions of your HTML there may be no toggle button. Create one if missing.
+// This block intentionally avoids throwing exceptions when elements are missing.
+
+(function setupDebugToggle(){
+  // ensure debugEl exists
+  if(!debugEl) return;
+
+  // try to find an existing button in the DOM
+  let toggleDebugBtn = document.querySelector('#toggleDebugBtn');
+
+  // if not found, create a small button and insert it beside debug section
+  if(!toggleDebugBtn){
+    try{
+      toggleDebugBtn = document.createElement('button');
+      toggleDebugBtn.id = 'toggleDebugBtn';
+      toggleDebugBtn.type = 'button';
+      toggleDebugBtn.textContent = 'Hide';
+      // simple styles to match your UI; you can adjust in CSS instead
+      toggleDebugBtn.style.cssText = 'float:right;margin-top:-8px;padding:6px 10px;border-radius:8px;border:1px solid #ddd;background:#fff;cursor:pointer;';
+      // try to locate debug container and append the button
+      const debugContainer = debugEl.closest('.card') || debugEl.parentElement;
+      if(debugContainer){
+        // put the button at the top-right of that container
+        debugContainer.insertBefore(toggleDebugBtn, debugContainer.firstChild);
+      } else {
+        // fallback: append to body
+        document.body.appendChild(toggleDebugBtn);
+      }
+    }catch(e){
+      // ignore any DOM errors
+      console.warn('Could not create toggleDebugBtn', e);
+      return;
+    }
+  }
+
+  // attach safe listener
+  try{
+    toggleDebugBtn.addEventListener('click', () => {
+      // toggle a CSS class to hide/show debug text
+      debugEl.classList.toggle('hidden');
+      const hidden = debugEl.classList.contains('hidden');
+      toggleDebugBtn.textContent = hidden ? 'Show' : 'Hide';
+    });
+  }catch(e){
+    console.warn('toggleDebugBtn listener failed', e);
+  }
+})();
