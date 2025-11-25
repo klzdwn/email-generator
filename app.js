@@ -3,6 +3,7 @@
    Auto polling every 3s, extract OTP codes (4-8 digits)
 */
 
+// DOM refs
 const genBtn = document.getElementById('genBtn');
 const newBtn = document.getElementById('newBtn');
 const copyBtn = document.getElementById('copyBtn');
@@ -21,9 +22,8 @@ const downloadMsg = document.getElementById('downloadMsg');
 
 let login = null, domain = null;
 let pollTimer = null;
-let lastIds = new Set();
 
-// util: random
+// util random
 function randStr(len = 10){
   const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
   let s = '';
@@ -31,7 +31,7 @@ function randStr(len = 10){
   return s;
 }
 
-// save/load to localStorage
+// load state
 function saveState(){
   if (login && domain) {
     localStorage.setItem('tm_login', login);
@@ -93,12 +93,12 @@ copyBtn.addEventListener('click', async () => {
   }
 });
 
-// start polling
+// polling
 function startPolling(){
   if (!login || !domain) return;
   if (pollTimer) clearInterval(pollTimer);
   pollTimer = setInterval(fetchInbox, 3000);
-  fetchInbox(); // immediate
+  fetchInbox();
 }
 
 // fetch inbox
@@ -118,10 +118,8 @@ async function fetchInbox(){
       return;
     }
 
-    // sort newest first
     arr.sort((a,b)=>b.date.localeCompare(a.date));
 
-    // build UI
     inboxList.innerHTML = '';
     for (const msg of arr){
       const id = msg.id;
@@ -162,7 +160,7 @@ async function fetchInbox(){
   }
 }
 
-// open message details
+// open message
 async function openMessage(id){
   if (!login || !domain) return;
   const url = `https://www.1secmail.com/api/v1/?action=readMessage&login=${encodeURIComponent(login)}&domain=${encodeURIComponent(domain)}&id=${id}`;
@@ -178,19 +176,15 @@ async function openMessage(id){
     const text = data.textBody || '';
     const html = data.htmlBody || '';
 
-    // display body: prefer text, if html exists show sanitized html
     if (html) {
-      // parse html and show limited content
       const parser = new DOMParser();
       const doc = parser.parseFromString(html, 'text/html');
-      // remove scripts
       doc.querySelectorAll('script,iframe').forEach(n=>n.remove());
       mBody.innerHTML = doc.body.innerHTML || escapeHtml(text || html);
     } else {
       mBody.textContent = text || '[no body]';
     }
 
-    // extract OTP using regex (common 4-8 digit)
     const otp = extractOtp(text + ' ' + (html || ''));
     mOtp.textContent = otp || '-';
     viewer.style.display = '';
@@ -200,7 +194,7 @@ async function openMessage(id){
   }
 }
 
-// delete (1secmail supports delete)
+// delete message
 async function deleteMessage(id){
   if (!login || !domain) return;
   const url = `https://www.1secmail.com/api/v1/?action=deleteMessage&login=${encodeURIComponent(login)}&domain=${encodeURIComponent(domain)}&id=${id}`;
@@ -218,12 +212,8 @@ async function deleteMessage(id){
   }
 }
 
-// close viewer
-closeMsg.addEventListener('click', () => {
-  viewer.style.display = 'none';
-});
+closeMsg.addEventListener('click', () => viewer.style.display = 'none');
 
-// download message as .txt
 downloadMsg.addEventListener('click', () => {
   const from = mFrom.textContent || '';
   const subject = mSub.textContent || '';
@@ -240,17 +230,13 @@ downloadMsg.addEventListener('click', () => {
   URL.revokeObjectURL(url);
 });
 
-// helper: extract OTP 4-8 digits
+// extract OTP 4-8 digits
 function extractOtp(text){
   if (!text) return null;
-  // common patterns: code: 123456 ; verification code 1234
-  const patterns = [
-    /\b(\d{4,8})\b/g, // any 4-8 digit
-  ];
+  const patterns = [/\b(\d{4,8})\b/g];
   for (const rx of patterns){
     let m;
     while ((m = rx.exec(text)) !== null){
-      // skip long runs (but pattern already 4-8)
       const code = m[1] || m[0];
       if (code && code.length >=4 && code.length <=8) return code;
     }
@@ -258,7 +244,6 @@ function extractOtp(text){
   return null;
 }
 
-// helper: escape
 function escapeHtml(s){
   if (!s) return '';
   return s.replace(/[&<>"']/g, (c)=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
