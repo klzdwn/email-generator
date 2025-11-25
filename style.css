@@ -142,3 +142,20 @@ button.primary{ background: linear-gradient(90deg,var(--accent-1),var(--accent-2
 
 /* small utility */
 .hidden{ display:none !important; }
+
+/* debug header (hide/show) */
+.debug-header{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  margin-bottom:8px;
+}
+
+button.small{
+  padding:6px 10px;
+  font-size:12px;
+}
+
+#debugLog.hidden{
+  display:none;
+}
