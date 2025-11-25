@@ -1,4 +1,4 @@
-// app.js - Static 1secmail demo
+// app.js - Static 1secmail demo (minimal, polling + otp extract)
 const genBtn = document.getElementById('genBtn');
 const newBtn = document.getElementById('newBtn');
 const copyBtn = document.getElementById('copyBtn');
