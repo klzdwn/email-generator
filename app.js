@@ -271,3 +271,11 @@ pollCheckbox.addEventListener('change', ()=> {
     startPolling();
   }
 })();
+// --- debug hide/show ---
+const debugLog = document.querySelector('#debugLog');
+const toggleDebugBtn = document.querySelector('#toggleDebugBtn');
+
+toggleDebugBtn.addEventListener('click', () => {
+  const hidden = debugLog.classList.toggle('hidden');
+  toggleDebugBtn.textContent = hidden ? 'Show' : 'Hide';
+});
