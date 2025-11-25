@@ -1,27 +1,30 @@
-// api/messages.js
-const fetch = globalThis.fetch || require('node-fetch');
+export default async function handler(req, res) {
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Method not allowed" });
+  }
 
-module.exports = async (req, res) => {
-  // expects Authorization header with Bearer <token>
-  const auth = req.headers.authorization || req.headers.Authorization;
-  if(!auth || !auth.startsWith('Bearer ')){
-    res.status(401).json({ error:'missing_token' });
-    return;
+  const { token } = req.body;
+
+  if (!token) {
+    return res.status(400).json({ error: "Missing token" });
   }
-  const token = auth.split(' ')[1];
-  try{
-    const r = await fetch('https://api.mail.tm/messages', {
-      headers: { 'Authorization': 'Bearer ' + token }
+
+  try {
+    const inbox = await fetch("https://api.mail.tm/messages", {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
     });
-    const text = await r.text();
-    let body;
-    try { body = text ? JSON.parse(text) : null; } catch(e){ body = text; }
-    if(!r.ok){
-      return res.status(r.status).json({ error:'mailtm_error', detail: body || text });
-    }
-    return res.status(200).json(body);
-  }catch(err){
-    console.error('[messages] err', err);
-    return res.status(500).json({ error:'internal_error', message: err.message });
+
+    const data = await inbox.json();
+
+    return res.status(200).json({ messages: data });
+
+  } catch (e) {
+    return res.status(500).json({
+      error: "server_error",
+      detail: e.message,
+    });
   }
-};
+}
