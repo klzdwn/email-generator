@@ -4,69 +4,85 @@ export default async function handler(req, res) {
 
   const API = "https://api.mail.tm";
 
+  // BANYAK fallback domain untuk cegah error
+  const FALLBACK = [
+    "mail.tm",
+    "1secmail.com",
+    "disposablemail.com",
+    "comfyhthings.com"
+  ];
+
   function rand(n = 10) {
     const c = "abcdefghijklmnopqrstuvwxyz0123456789";
-    let s = "";
-    while (s.length < n) s += c[Math.floor(Math.random() * c.length)];
-    return s;
+    return Array(n)
+      .fill(0)
+      .map(() => c[Math.floor(Math.random() * c.length)])
+      .join("");
   }
 
   try {
-    // get domains
-    let domain = "mail.tm";
+    let domain = FALLBACK[Math.floor(Math.random() * FALLBACK.length)];
+
+    // coba fetch domain asli mail.tm
     try {
       const d = await fetch(`${API}/domains`);
       if (d.ok) {
-        const jd = await d.json();
-        if (jd["hydra:member"]?.length)
-          domain = jd["hydra:member"][0].domain;
+        const j = await d.json();
+        if (j["hydra:member"]?.length)
+          domain = j["hydra:member"][0].domain;
       }
     } catch (_) {}
 
-    const local = rand(12);
-    const address = `${local}@${domain}`;
+    const address = `${rand(12)}@${domain}`;
     const password = rand(12);
 
-    // create account
-    const cre = await fetch(`${API}/accounts`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ address, password }),
-    });
+    // retry create 5x jika gagal
+    let token = null;
+    let lastError = null;
 
-    if (!cre.ok && cre.status !== 409) {
-      return res.status(500).json({
-        ok: false,
-        error: "create_failed",
-        status: cre.status,
+    for (let i = 0; i < 5; i++) {
+      // create account
+      const cre = await fetch(`${API}/accounts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ address, password })
       });
+
+      if (cre.ok || cre.status === 409) {
+        // login
+        const tok = await fetch(`${API}/token`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ address, password })
+        });
+
+        if (tok.ok) {
+          const j = await tok.json();
+          token = j.token;
+          break;
+        } else {
+          lastError = `token_fail_${tok.status}`;
+        }
+      } else {
+        lastError = `create_fail_${cre.status}`;
+      }
     }
 
-    // login (get token)
-    const tok = await fetch(`${API}/token`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ address, password }),
-    });
-
-    if (!tok.ok)
-      return res
-        .status(500)
-        .json({ ok: false, error: "token_failed", status: tok.status });
-
-    const j = await tok.json();
+    if (!token)
+      return res.status(500).json({ ok: false, error: lastError });
 
     return res.json({
       ok: true,
       address,
       password,
-      token: j.token,
+      token
     });
+
   } catch (err) {
     return res.status(500).json({
       ok: false,
       error: "server_exception",
-      detail: String(err),
+      detail: String(err)
     });
   }
 }
