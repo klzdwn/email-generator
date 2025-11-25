@@ -3,53 +3,42 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>TempMail — Simple OTP Receiver</title>
-  <link rel="stylesheet" href="style.css">
+  <title>TempMail (1secmail demo)</title>
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <main class="wrap">
-    <header>
-      <h1>TempMail</h1>
-      <p class="lead">Generate disposable email & receive OTP (1secmail)</p>
-    </header>
+  <header>
+    <h1>TempMail</h1>
+  </header>
 
-    <section class="card actions">
-      <div class="row">
-        <button id="genBtn" class="btn primary">Generate Email</button>
-        <button id="newBtn" class="btn" style="display:none">New Email</button>
-        <button id="copyBtn" class="btn" style="display:none">Copy</button>
+  <main class="card">
+    <button id="genBtn" class="primary">Generate Email</button>
+    <div id="addressBox" class="address" style="display:none;">
+      <div><strong>Address:</strong> <span id="addressText"></span></div>
+      <div class="controls">
+        <button id="copyBtn" style="display:none;">Copy address</button>
+        <button id="newBtn" style="display:none;">New</button>
       </div>
+    </div>
 
-      <div id="addressBox" class="addressBox" style="display:none">
-        <div><strong>Address:</strong> <span id="addressText"></span></div>
-        <div><small id="hint">Polling every 3s — waiting for messages...</small></div>
-      </div>
-
-      <div id="status" class="status"></div>
-    </section>
-
-    <section class="card inbox">
+    <section id="inbox">
       <h2>Inbox</h2>
-      <div id="inboxList" class="inboxList">No messages.</div>
+      <div id="status" class="muted"></div>
+      <div id="inboxList">No messages.</div>
     </section>
 
-    <section class="card viewer" id="viewer" style="display:none">
-      <h3>Message</h3>
-      <div class="meta">
-        <div><strong>From:</strong> <span id="mFrom"></span></div>
-        <div><strong>Subject:</strong> <span id="mSub"></span></div>
-        <div><strong>OTP:</strong> <span id="mOtp"></span></div>
+    <div id="viewer" class="viewer" style="display:none;">
+      <h3 id="mSub"></h3>
+      <div><strong>From:</strong> <span id="mFrom"></span></div>
+      <div><strong>OTP:</strong> <span id="mOtp">-</span></div>
+      <div id="mBody" class="body"></div>
+      <div class="viewerActions">
+        <button id="closeMsg">Close</button>
+        <button id="downloadMsg">Download .txt</button>
       </div>
-      <div id="mBody" class="mBody"></div>
-      <div class="row">
-        <button id="closeMsg" class="btn">Close</button>
-        <button id="downloadMsg" class="btn">Download .txt</button>
-      </div>
-    </section>
+    </div>
 
-    <footer class="foot">
-      <small>Using <a href="https://www.1secmail.com/" target="_blank" rel="noopener">1secmail API</a>. Some sites block disposable emails — not guaranteed for all OTP providers.</small>
-    </footer>
+    <p class="debug">Debug mode: shows short error details for troubleshooting.</p>
   </main>
 
   <script src="app.js"></script>
