@@ -1,34 +1,18 @@
-// api/messages.js
-// GET /api/messages?token=<token>
+// /api/messages.js — Fetch inbox from 1SecMail
 export default async function handler(req, res) {
-  const token = req.query.token || (req.headers.authorization && req.headers.authorization.split(" ")[1]);
+  const { login, domain } = req.query;
 
-  if (!token) return res.status(400).json({ error: "token required (query ?token= or Authorization: Bearer <token>)" });
+  if (!login || !domain) {
+    return res.status(400).json({ error: "missing_params" });
+  }
+
+  const url = `https://www.1secmail.com/api/v1/?action=getMessages&login=${login}&domain=${domain}`;
 
   try {
-    const resp = await fetch("https://api.mail.tm/messages?page=1&perPage=50", {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-
-    if (!resp.ok) {
-      const t = await resp.text();
-      return res.status(resp.status).json({ error: "mail.tm error", detail: t });
-    }
-
-    const data = await resp.json();
-
-    // normalize items to lightweight shape
-    const items = (data?.hydra?.member || []).map((m) => ({
-      id: m.id,
-      from: (m.from && m.from.address) || m.from || "unknown",
-      subject: m.subject || "(no subject)",
-      intro: m.intro || "",
-      createdAt: m.createdAt,
-    }));
-
-    return res.status(200).json(items);
-  } catch (err) {
-    console.error(err);
-    return res.status(500).json({ error: "server error", detail: String(err) });
+    const r = await fetch(url);
+    const data = await r.json();
+    res.status(200).json({ messages: data });
+  } catch (e) {
+    res.status(500).json({ error: "fetch_failed", detail: String(e) });
   }
 }
