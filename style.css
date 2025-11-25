@@ -159,3 +159,57 @@ button.small{
 #debugLog.hidden{
   display:none;
 }
+/* universal message card */
+.message-card{
+  background: #fff;
+  border-radius: 12px;
+  padding: 14px;
+  box-shadow: 0 6px 18px rgba(12,18,30,0.06);
+  margin-bottom: 14px;
+  overflow: hidden;
+}
+.message-meta{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:10px;
+  margin-bottom:8px;
+}
+.message-title{
+  font-weight:700;
+  color:#222;
+}
+.message-from{
+  color:#666;
+  font-size:13px;
+}
+.message-preview{
+  color:#444;
+  margin:10px 0;
+  min-height:28px;
+}
+.message-body{
+  border-top:1px solid #eee;
+  padding-top:12px;
+  margin-top:8px;
+}
+.btn-view{
+  padding:6px 12px;
+  background:#f3f4f6;
+  border-radius:8px;
+  border:1px solid #e6e6e6;
+  cursor:pointer;
+}
+.btn-view:active{ transform: translateY(1px); }
+.message-loading{
+  color:#999;
+  font-style:italic;
+}
+
+/* collapsed body */
+.message-body.collapsed{ display:none; }
+
+/* make cards consistent on wide screens */
+@media(min-width:800px){
+  .message-card{ padding:18px; }
+}
