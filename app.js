@@ -1,145 +1,273 @@
-// app.js - Static 1secmail demo (minimal, polling + otp extract)
-const genBtn = document.getElementById('genBtn');
-const newBtn = document.getElementById('newBtn');
-const copyBtn = document.getElementById('copyBtn');
-const addressBox = document.getElementById('addressBox');
-const addressText = document.getElementById('addressText');
-const inboxList = document.getElementById('inboxList');
-const statusEl = document.getElementById('status');
+// app.js - simple mail.tm client (static frontend)
+// NOTE: mail.tm endpoints are public: https://api.mail.tm
+// Stores token & account in localStorage.
 
-const viewer = document.getElementById('viewer');
-const mFrom = document.getElementById('mFrom');
-const mSub = document.getElementById('mSub');
-const mOtp = document.getElementById('mOtp');
-const mBody = document.getElementById('mBody');
-const closeMsg = document.getElementById('closeMsg');
-const downloadMsg = document.getElementById('downloadMsg');
+const API_BASE = 'https://api.mail.tm';
+const $ = sel => document.querySelector(sel);
 
-let login = null, domain = null, pollTimer = null;
+const createBtn = $('#createBtn');
+const deleteBtn = $('#deleteBtn');
+const copyBtn = $('#copyBtn');
+const fetchBtn = $('#fetchBtn');
+const pollCheckbox = $('#pollCheckbox');
 
-function randStr(len = 10){
+const addressEl = $('#address');
+const passwordEl = $('#password');
+const tokenEl = $('#token');
+const messagesEl = $('#messages');
+const debugEl = $('#debugLog');
+const otpArea = $('#otpArea');
+const otpValue = $('#otpValue');
+
+let pollInterval = null;
+let current = {
+  address: localStorage.getItem('tm_address') || null,
+  password: localStorage.getItem('tm_password') || null,
+  token: localStorage.getItem('tm_token') || null,
+  accountId: localStorage.getItem('tm_account_id') || null,
+};
+
+function logDebug(...args){
+  const s = args.map(a => typeof a === 'string' ? a : JSON.stringify(a,null,2)).join(' ');
+  debugEl.textContent = `${new Date().toLocaleTimeString()} - ${s}\n` + debugEl.textContent;
+}
+
+// ui refresh
+function refreshUI(){
+  addressEl.textContent = current.address || '-';
+  passwordEl.textContent = current.password ? '••••••••' : '-';
+  tokenEl.textContent = current.token ? (current.token.slice(0,22) + '…') : '-';
+}
+
+// helper fetch that returns {ok,status,body,raw}
+async function fetchJson(url, opts = {}){
+  try{
+    const r = await fetch(url, opts);
+    const text = await r.text();
+    let body = null;
+    try { body = text ? JSON.parse(text) : null; } catch(e) { body = text; }
+    return { ok: r.ok, status: r.status, body, raw: text };
+  } catch(e){
+    return { ok:false, status:0, body:null, fetchErr: String(e) };
+  }
+}
+
+// get domains
+async function getDomains(){
+  const res = await fetchJson(API_BASE + '/domains');
+  if(!res.ok) return [];
+  // try to read array path
+  if(res.body && Array.isArray(res.body['hydra:member'])) {
+    return res.body['hydra:member'].map(d=>d.domain);
+  }
+  // fallback
+  if(res.body && Array.isArray(res.body)) return res.body.map(d=>d.domain);
+  return [];
+}
+
+// create account (tries random local part)
+function randLocal(len=8){
   const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
   let s = '';
-  for (let i=0;i<len;i++) s+=chars[Math.floor(Math.random()*chars.length)];
+  for(let i=0;i<len;i++) s += chars[Math.floor(Math.random()*chars.length)];
   return s;
 }
 
-function saveState(){ if(login&&domain){localStorage.setItem('tm_login',login);localStorage.setItem('tm_domain',domain);} }
-function loadState(){
-  const l = localStorage.getItem('tm_login'), d = localStorage.getItem('tm_domain');
-  if (l && d) { login = l; domain = d; addressText.textContent = `${login}@${domain}`; addressBox.style.display=''; copyBtn.style.display=''; newBtn.style.display=''; genBtn.style.display='none'; startPolling(); }
-}
-loadState();
-
-genBtn.addEventListener('click', ()=>{
-  login = randStr(10);
-  const domains = ['1secmail.com','1secmail.org','1secmail.net'];
-  domain = domains[Math.floor(Math.random()*domains.length)];
-  addressText.textContent = `${login}@${domain}`;
-  addressBox.style.display=''; copyBtn.style.display=''; newBtn.style.display=''; genBtn.style.display='none';
-  statusEl.textContent = 'Polling every 3s...';
-  saveState();
-  startPolling();
-});
-
-newBtn && newBtn.addEventListener('click', ()=>{
-  clearInterval(pollTimer);
-  localStorage.removeItem('tm_login'); localStorage.removeItem('tm_domain');
-  login = domain = null;
-  inboxList.innerHTML = 'No messages.';
-  addressBox.style.display='none'; copyBtn.style.display='none'; newBtn.style.display='none'; genBtn.style.display='';
-  statusEl.textContent = '';
-});
-
-copyBtn && copyBtn.addEventListener('click', async ()=>{
-  try{ await navigator.clipboard.writeText(addressText.textContent.trim()); statusEl.textContent='Copied.' }catch(e){ statusEl.textContent='Copy failed'; }
-});
-
-function startPolling(){
-  if(!login||!domain) return;
-  if(pollTimer) clearInterval(pollTimer);
-  pollTimer = setInterval(fetchInbox,3000);
-  fetchInbox();
-}
-
-async function fetchInbox(){
-  if(!login||!domain) return;
-  const url = `https://www.1secmail.com/api/v1/?action=getMessages&login=${encodeURIComponent(login)}&domain=${encodeURIComponent(domain)}`;
-  try{
-    const res = await fetch(url);
-    if(!res.ok){ statusEl.textContent = `Inbox fetch failed: ${res.status}`; return; }
-    const arr = await res.json();
-    if(!Array.isArray(arr)||arr.length===0){ inboxList.innerHTML='No messages.'; return; }
-    arr.sort((a,b)=>b.date.localeCompare(a.date));
-    inboxList.innerHTML = '';
-    for(const msg of arr){
-      const item = document.createElement('div'); item.className='msgItem';
-      const meta = document.createElement('div'); meta.innerHTML = `<div><strong>${escapeHtml(msg.from)}</strong></div><div class="muted">${escapeHtml(msg.subject)}</div><div class="muted" style="font-size:12px">${new Date(msg.date).toLocaleString()}</div>`;
-      const actions = document.createElement('div');
-      const open = document.createElement('button'); open.className='btn'; open.textContent='Open';
-      open.onclick = ()=>openMessage(msg.id);
-      const del = document.createElement('button'); del.className='btn'; del.textContent='Delete';
-      del.onclick = ()=>deleteMessage(msg.id);
-      actions.appendChild(open); actions.appendChild(del);
-      item.appendChild(meta); item.appendChild(actions);
-      inboxList.appendChild(item);
-    }
-  }catch(e){
-    console.error(e);
-    statusEl.textContent = 'Network error while fetching inbox';
+async function createMailbox(){
+  debugEl.textContent = '';
+  logDebug('creating mailbox…');
+  // domains
+  const dres = await fetchJson(API_BASE + '/domains');
+  logDebug('domains', dres);
+  let domains = [];
+  if(dres.ok && dres.body && Array.isArray(dres.body['hydra:member'])) {
+    domains = dres.body['hydra:member'].map(m => m.domain).filter(Boolean);
   }
-}
+  if(!domains.length) domains = ['mail.tm','1secmail.com','trashmail.com']; // fallback
 
-async function openMessage(id){
-  const url = `https://www.1secmail.com/api/v1/?action=readMessage&login=${encodeURIComponent(login)}&domain=${encodeURIComponent(domain)}&id=${id}`;
-  try{
-    const res = await fetch(url);
-    if(!res.ok){ statusEl.textContent = `Message fetch failed: ${res.status}`; return; }
-    const d = await res.json();
-    mFrom.textContent = d.from || '';
-    mSub.textContent = d.subject || '';
-    const text = d.textBody || '';
-    const html = d.htmlBody || '';
-    if(html){
-      const parser = new DOMParser(); const doc = parser.parseFromString(html,'text/html'); doc.querySelectorAll('script,iframe').forEach(n=>n.remove());
-      mBody.innerHTML = doc.body.innerHTML || escapeHtml(text||html);
+  const attempts = 6;
+  for(let i=0;i<attempts;i++){
+    const domain = domains[i % domains.length] || 'mail.tm';
+    const local = randLocal(10);
+    const address = `${local}@${domain}`;
+    const password = Math.random().toString(36).slice(2,12);
+
+    logDebug('try create', address);
+
+    const createResp = await fetchJson(API_BASE + '/accounts', {
+      method:'POST',
+      headers: { 'Content-Type':'application/json' },
+      body: JSON.stringify({ address, password })
+    });
+
+    logDebug('createResp', createResp);
+
+    if(createResp.ok){
+      // got account; now get token
+      const tokenResp = await fetchJson(API_BASE + '/token', {
+        method:'POST',
+        headers:{ 'Content-Type':'application/json' },
+        body: JSON.stringify({ address, password })
+      });
+
+      logDebug('tokenResp', tokenResp);
+      if(tokenResp.ok && tokenResp.body && tokenResp.body.token){
+        current.address = address;
+        current.password = password;
+        current.token = tokenResp.body.token;
+        current.accountId = createResp.body && createResp.body.id ? createResp.body.id : null;
+
+        // save
+        localStorage.setItem('tm_address', current.address);
+        localStorage.setItem('tm_password', current.password);
+        localStorage.setItem('tm_token', current.token);
+        if(current.accountId) localStorage.setItem('tm_account_id', current.accountId);
+
+        refreshUI();
+        startPolling();
+        return { ok:true };
+      } else {
+        // account created but token fail -> maybe immediate login not allowed
+        return { ok:false, error:'token_failed', detail: tokenResp };
+      }
     } else {
-      mBody.textContent = text || '[no body]';
+      // handle 422 (exists) -> try again; other -> return error
+      if(createResp.status === 422 || createResp.status === 400) {
+        logDebug('account exists or invalid, try next');
+        continue;
+      } else {
+        return { ok:false, error:'create_account_failed', detail:createResp };
+      }
     }
-    const otp = extractOtp((text||'') + ' ' + (html||''));
-    mOtp.textContent = otp || '-';
-    viewer.style.display = '';
-  }catch(e){ console.error(e); statusEl.textContent='Error reading message'; }
+  }
+  return { ok:false, error:'no_available' };
 }
 
-async function deleteMessage(id){
-  const url = `https://www.1secmail.com/api/v1/?action=deleteMessage&login=${encodeURIComponent(login)}&domain=${encodeURIComponent(domain)}&id=${id}`;
+async function deleteMailbox(){
+  // mail.tm does not always provide delete endpoint for account via token; but we can remove local data
   try{
-    const res = await fetch(url);
-    if(res.ok){ statusEl.textContent='Message deleted'; fetchInbox(); } else { statusEl.textContent='Delete failed'; }
-  }catch(e){ statusEl.textContent='Network delete error'; }
+    localStorage.removeItem('tm_address'); localStorage.removeItem('tm_password');
+    localStorage.removeItem('tm_token'); localStorage.removeItem('tm_account_id');
+    current = {address:null,password:null,token:null,accountId:null};
+    refreshUI();
+    stopPolling();
+    logDebug('local mailbox cleared');
+  }catch(e){
+    logDebug('delete error', e);
+  }
 }
 
-closeMsg && closeMsg.addEventListener('click', ()=>viewer.style.display='none');
+// fetch messages
+async function fetchMessages(){
+  if(!current.token) {
+    logDebug('no token, cannot fetch messages');
+    return;
+  }
+  messagesEl.innerHTML = '<p class="muted">Loading messages…</p>';
+  const res = await fetchJson(API_BASE + '/messages', {
+    headers: { Authorization: `Bearer ${current.token}` }
+  });
+  logDebug('messages list', res);
+  if(!res.ok){
+    messagesEl.innerHTML = `<p class="muted">Failed to fetch messages (status ${res.status})</p>`;
+    return;
+  }
+  const list = Array.isArray(res.body['hydra:member']) ? res.body['hydra:member'] : (Array.isArray(res.body) ? res.body : []);
+  if(!list.length){
+    messagesEl.innerHTML = `<p class="muted">No messages yet.</p>`;
+    otpArea.classList.add('hidden');
+    return;
+  }
+  messagesEl.innerHTML = '';
+  // show messages
+  for(const m of list){
+    const div = document.createElement('div');
+    div.className = 'message';
+    const from = m.from ? (m.from.address || m.from) : 'unknown';
+    div.innerHTML = `<div><strong>${m.subject || '(no subject)'}</strong></div>
+                     <div class="muted">From: ${from} — ${new Date(m.createdAt).toLocaleString()}</div>
+                     <div id="body-${m.id}" class="msg-body muted">Loading body…</div>
+                     <button data-id="${m.id}" class="viewBtn">View</button>`;
+    messagesEl.appendChild(div);
 
-downloadMsg && downloadMsg.addEventListener('click', ()=>{
-  const from = mFrom.textContent||'';
-  const subject = mSub.textContent||'';
-  const body = mBody.textContent || mBody.innerText || '';
-  const content = `From: ${from}\nSubject: ${subject}\n\n${body}`;
-  const blob = new Blob([content],{type:'text/plain'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a'); a.href = url; a.download = `${subject||'message'}.txt`; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    // prefetch body not always returned, so fetch each message body
+    (async ()=>{
+      const b = await fetchJson(API_BASE + `/messages/${m.id}`, { headers: { Authorization: `Bearer ${current.token}` } });
+      logDebug('message body', b);
+      const bodyEl = document.getElementById(`body-${m.id}`);
+      if(b.ok && b.body){
+        const text = b.body.html || b.body.text || JSON.stringify(b.body);
+        bodyEl.innerHTML = text;
+        detectOtp(text);
+      } else {
+        bodyEl.innerHTML = `<span class="muted">Failed to load message</span>`;
+      }
+    })();
+  }
+}
+
+// detect OTP from a text/html blob
+function detectOtp(text){
+  if(!text) return;
+  // strip tags and decode
+  const tmp = document.createElement('div');
+  tmp.innerHTML = text;
+  const plain = tmp.textContent || tmp.innerText || text;
+  // regex: 4-8 digit sequences (common OTP lengths)
+  const m = plain.match(/\b(\d{4,8})\b/);
+  if(m){
+    otpArea.classList.remove('hidden');
+    otpValue.textContent = m[1];
+    logDebug('OTP detected', m[1]);
+  }
+}
+
+// polling
+function startPolling(){
+  stopPolling();
+  if(!pollCheckbox.checked) return;
+  pollInterval = setInterval(fetchMessages, 4000);
+  fetchMessages();
+  logDebug('polling started');
+}
+function stopPolling(){
+  if(pollInterval) { clearInterval(pollInterval); pollInterval = null; logDebug('polling stopped'); }
+}
+
+// attach events
+createBtn.addEventListener('click', async ()=>{
+  createBtn.disabled = true;
+  const r = await createMailbox();
+  logDebug('create result', r);
+  if(!r.ok){
+    alert('Gagal membuat mailbox: ' + (r.error || JSON.stringify(r.detail)));
+    logDebug('create error', r);
+  } else {
+    refreshUI();
+  }
+  createBtn.disabled = false;
 });
 
-function extractOtp(text){
-  if(!text) return null;
-  const rx = /\b(\d{4,8})\b/g;
-  let m;
-  while((m=rx.exec(text)) !== null){
-    if(m[1]) return m[1];
-  }
-  return null;
-}
+deleteBtn.addEventListener('click', async ()=>{
+  if(!confirm('Delete local mailbox data?')) return;
+  await deleteMailbox();
+});
 
-function escapeHtml(s){ if(!s) return ''; return s.replace(/[&<>"']/g,(c)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+copyBtn.addEventListener('click', ()=>{
+  if(!current.address) return alert('No address');
+  navigator.clipboard.writeText(current.address).then(()=> alert('Copied'));
+});
+
+fetchBtn.addEventListener('click', ()=> fetchMessages());
+pollCheckbox.addEventListener('change', ()=> {
+  if(pollCheckbox.checked) startPolling(); else stopPolling();
+});
+
+// on load: restore token => start polling
+(function init(){
+  refreshUI();
+  if(current.token){
+    logDebug('found token, starting poll');
+    startPolling();
+  }
+})();
