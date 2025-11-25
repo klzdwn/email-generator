@@ -1,88 +1,75 @@
-export default async function handler(req, res) {
-  if (req.method !== "POST")
-    return res.status(405).json({ ok: false, error: "method_not_allowed" });
+// api/create.js
+const fetch = globalThis.fetch || require('node-fetch');
 
-  const API = "https://api.mail.tm";
+function randString(len=6){
+  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  let s='';
+  for(let i=0;i<len;i++) s+=chars[Math.floor(Math.random()*chars.length)];
+  return s;
+}
 
-  // BANYAK fallback domain untuk cegah error
-  const FALLBACK = [
-    "mail.tm",
-    "1secmail.com",
-    "disposablemail.com",
-    "comfyhthings.com"
-  ];
+async function fetchJson(url, opts){
+  const r = await fetch(url, opts);
+  const text = await r.text();
+  let json = null;
+  try { json = text ? JSON.parse(text) : null; } catch(e){ json = text; }
+  return { ok: r.ok, status: r.status, body: json, raw: text };
+}
 
-  function rand(n = 10) {
-    const c = "abcdefghijklmnopqrstuvwxyz0123456789";
-    return Array(n)
-      .fill(0)
-      .map(() => c[Math.floor(Math.random() * c.length)])
-      .join("");
+module.exports = async (req, res) => {
+  if(req.method !== 'POST'){
+    res.status(405).json({ error: 'method_not_allowed' });
+    return;
   }
 
-  try {
-    let domain = FALLBACK[Math.floor(Math.random() * FALLBACK.length)];
-
-    // coba fetch domain asli mail.tm
-    try {
-      const d = await fetch(`${API}/domains`);
-      if (d.ok) {
-        const j = await d.json();
-        if (j["hydra:member"]?.length)
-          domain = j["hydra:member"][0].domain;
-      }
-    } catch (_) {}
-
-    const address = `${rand(12)}@${domain}`;
-    const password = rand(12);
-
-    // retry create 5x jika gagal
-    let token = null;
-    let lastError = null;
-
-    for (let i = 0; i < 5; i++) {
-      // create account
-      const cre = await fetch(`${API}/accounts`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ address, password })
-      });
-
-      if (cre.ok || cre.status === 409) {
-        // login
-        const tok = await fetch(`${API}/token`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ address, password })
-        });
-
-        if (tok.ok) {
-          const j = await tok.json();
-          token = j.token;
-          break;
-        } else {
-          lastError = `token_fail_${tok.status}`;
-        }
-      } else {
-        lastError = `create_fail_${cre.status}`;
-      }
+  try{
+    // 1) get domains
+    const domainsRes = await fetchJson('https://api.mail.tm/domains');
+    let domain = null;
+    if(domainsRes.ok && domainsRes.body && domainsRes.body['hydra:member'] && domainsRes.body['hydra:member'].length){
+      domain = domainsRes.body['hydra:member'][0].domain;
+    } else if(domainsRes.ok && Array.isArray(domainsRes.body) && domainsRes.body.length){
+      domain = domainsRes.body[0].domain;
+    } else {
+      // fallback list
+      const fallback = ['mail.tm','trashmail.com','disposableemail.com','1secmail.com'];
+      domain = fallback[0];
+      console.warn('domains fetch failed, using fallback', domainsRes.status, domainsRes.body);
     }
 
-    if (!token)
-      return res.status(500).json({ ok: false, error: lastError });
+    // 2) create account
+    const localpart = 'tm' + randString(8);
+    const address = `${localpart}@${domain}`;
+    const password = randString(12);
 
-    return res.json({
-      ok: true,
-      address,
-      password,
-      token
+    const createRes = await fetchJson('https://api.mail.tm/accounts', {
+      method: 'POST',
+      headers: { 'content-type':'application/json' },
+      body: JSON.stringify({ address, password })
     });
 
-  } catch (err) {
-    return res.status(500).json({
-      ok: false,
-      error: "server_exception",
-      detail: String(err)
+    if(!createRes.ok){
+      console.error('[create] create account response:', createRes.status, createRes.body);
+      return res.status(500).json({ error: 'create_failed', detail:createRes.body || createRes.raw || null });
+    }
+
+    // 3) get token
+    const tokenRes = await fetchJson('https://api.mail.tm/token', {
+      method:'POST',
+      headers:{'content-type':'application/json'},
+      body: JSON.stringify({ address, password })
     });
+
+    if(!tokenRes.ok || !tokenRes.body || !tokenRes.body.token){
+      console.error('[create] token response:', tokenRes.status, tokenRes.body);
+      return res.status(500).json({ error: 'token_failed', detail: tokenRes.body || tokenRes.raw || null });
+    }
+
+    const token = tokenRes.body.token;
+    return res.json({ address, password, token });
+
+  }catch(err){
+    console.error('[create] uncaught', err);
+    return res.status(500).json({ error: 'internal_error', message: err.message });
   }
-}
+};
