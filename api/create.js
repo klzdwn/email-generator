@@ -1,97 +1,99 @@
 // api/create.js
-// Vercel Node 18 function, uses global fetch.
-// Creates a mailbox via mail.tm (or similar). Adjust domain list if needed.
+// Simple wrapper that logs everything for debugging and returns structured errors.
+// Paste this replacing your existing api/create.js (keep backups).
 
 export default async function handler(req, res) {
-  try {
-    if (req.method !== 'POST') {
-      res.status(405).json({ error: 'method_not_allowed', detail: 'Use POST' });
-      return;
-    }
+  // Only allow POST
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
 
-    // Optional: allow local dev to pass ?domain=somedomain
-    const body = req.body || {};
-    // prefer JSON body (Vercel will parse), or fallback to query
-    const domainHint = body.domain || req.query?.domain || '';
-
-    // Domains fallback - you can edit this list to ones accepted by the upstream API
-    const fallbackDomains = ["mail.tm", "trashmail.com", "disposablemail.com", "1secmail.com", "comfythings.com"];
-
-    // pick domain - if upstream supports domain selection
-    const domain = domainHint || fallbackDomains[Math.floor(Math.random()*fallbackDomains.length)];
-
-    // Generate local part + password
-    const local = (Math.random().toString(36).slice(2, 10));
-    const address = `${local}@${domain}`;
-    const password = Math.random().toString(36).slice(2, 12);
-
-    // Try create account at mail.tm API (example). Change URL if your upstream differs.
-    const createUrl = 'https://api.mail.tm/accounts';
-    const payload = { address, password };
-
-    const createResp = await fetch(createUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-
-    // Read body for better error reporting
-    const createText = await createResp.text();
-    let createJson = null;
-    try { createJson = createText ? JSON.parse(createText) : null; } catch(e) { createJson = { raw: createText }; }
-
-    if (!createResp.ok) {
-      // return helpful error
-      res.status(createResp.status).json({
-        error: 'create_account_failed',
-        detail: {
-          stage: 'create',
-          status: createResp.status,
-          body: createJson,
-          message: createJson?.message || createJson?.detail || null
-        }
-      });
-      return;
-    }
-
-    // If mail.tm returns account object, also try to create a token (login) to use later
-    // mail.tm expects POST to /token with JSON {address, password}
-    let token = null;
+  // Helper to fetch and capture details
+  async function fetchJson(url, opts = {}) {
     try {
-      const tokenResp = await fetch('https://api.mail.tm/token', {
+      const resp = await fetch(url, opts);
+      const text = await resp.text().catch(() => '');
+      let body = null;
+      try { body = text ? JSON.parse(text) : null; } catch (e) { body = text; }
+      return { ok: resp.ok, status: resp.status, body, raw: text };
+    } catch (err) {
+      // network error
+      return { ok: false, status: 0, body: null, raw: null, fetchErr: String(err) };
+    }
+  }
+
+  try {
+    // For debugging: log incoming request briefly
+    console.log('[create] incoming request body:', JSON.stringify(req.body).slice(0, 2000));
+
+    // Example: get domains from mail.tm API
+    const d = await fetchJson('https://api.mail.tm/domains');
+    console.log('[create] domains fetch result:', d);
+
+    let domains = [];
+    if (d && d.ok && d.body && d.body.hydra && Array.isArray(d.body.hydra.member)) {
+      domains = d.body.hydra.member.map(m => m.domain).filter(Boolean);
+    } else {
+      // fallback domains
+      domains = ["mail.tm","trashmail.com","disposablemail.com"];
+    }
+    console.log('[create] using domains:', domains);
+
+    // Try to create mailbox (6 attempts)
+    const attempts = 6;
+    let lastErr = null;
+    for (let attempt = 0; attempt < attempts; attempt++) {
+      const domain = domains[attempt % domains.length] || 'mail.tm';
+      const local = Math.random().toString(36).slice(2, 14);
+      const address = `${local}@${domain}`;
+      const password = Math.random().toString(36).slice(2, 12);
+
+      console.log(`[create] attempt ${attempt}: address=${address}`);
+
+      const createResp = await fetchJson('https://api.mail.tm/accounts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ address, password })
       });
-      const tokenText = await tokenResp.text();
-      const tokenJson = tokenText ? JSON.parse(tokenText) : null;
-      if (tokenResp.ok && tokenJson?.token) token = tokenJson.token;
-      else {
-        // not fatal: return account created but token missing
-        // include token error details
-        token = null;
-        // include token debug in response below
+
+      console.log('[create] createResp:', createResp);
+
+      if (createResp.ok) {
+        // success -> create token
+        const tokenResp = await fetchJson('https://api.mail.tm/token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ address, password })
+        });
+        console.log('[create] tokenResp:', tokenResp);
+
+        return res.status(200).json({
+          ok: true,
+          address,
+          password,
+          token: tokenResp && tokenResp.body && tokenResp.body.token ? tokenResp.body.token : null,
+          details: { createResp, tokenResp }
+        });
+      } else {
+        lastErr = createResp;
+        // if 422 (exists) we try again
+        if (createResp.status === 422 || createResp.status === 400) {
+          console.warn('[create] account exists or bad request, continue attempts');
+          continue;
+        }
+        // other errors - record and break
+        console.error('[create] non-retry create error:', createResp);
+        break;
       }
-    } catch (eToken) {
-      // ignore but include in response body
-      console.error('token error', eToken);
     }
 
-    // respond success
-    res.status(200).json({
-      address,
-      password,
-      token,
-      meta: { createdAt: new Date().toISOString() }
-    });
+    // All attempts failed
+    console.error('[create] all attempts failed, lastErr:', lastErr);
+    return res.status(500).json({ error: 'create_account_failed', detail: lastErr });
+
   } catch (err) {
-    console.error('create.js unhandled error', err);
-    res.status(500).json({
-      error: 'server_error',
-      detail: {
-        stage: 'create_unhandled',
-        message: (err && err.message) ? err.message : String(err)
-      }
-    });
+    // Log full error stack
+    console.error('[create] UNCAUGHT ERROR', err && err.stack ? err.stack : err);
+    return res.status(500).json({ error: 'internal_error', message: String(err) });
   }
 }
