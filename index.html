@@ -1,29 +1,57 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>TempMail</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>TempMail — Simple OTP Receiver</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
+  <main class="wrap">
+    <header>
+      <h1>TempMail</h1>
+      <p class="lead">Generate disposable email & receive OTP (1secmail)</p>
+    </header>
 
-<div class="container">
-  <h1 class="title">TempMail</h1>
+    <section class="card actions">
+      <div class="row">
+        <button id="genBtn" class="btn primary">Generate Email</button>
+        <button id="newBtn" class="btn" style="display:none">New Email</button>
+        <button id="copyBtn" class="btn" style="display:none">Copy</button>
+      </div>
 
-  <div class="email-box">
-    <button id="genBtn">Generate Email</button>
+      <div id="addressBox" class="addressBox" style="display:none">
+        <div><strong>Address:</strong> <span id="addressText"></span></div>
+        <div><small id="hint">Polling every 3s — waiting for messages...</small></div>
+      </div>
 
-    <div id="emailContainer" class="hidden">
-      <p><strong>Email:</strong> <span id="email"></span></p>
-      <button id="copyBtn">Copy</button>
-    </div>
-  </div>
+      <div id="status" class="status"></div>
+    </section>
 
-  <h2>Inbox</h2>
-  <div id="inbox">No messages.</div>
-</div>
+    <section class="card inbox">
+      <h2>Inbox</h2>
+      <div id="inboxList" class="inboxList">No messages.</div>
+    </section>
 
-<script src="app.js"></script>
+    <section class="card viewer" id="viewer" style="display:none">
+      <h3>Message</h3>
+      <div class="meta">
+        <div><strong>From:</strong> <span id="mFrom"></span></div>
+        <div><strong>Subject:</strong> <span id="mSub"></span></div>
+        <div><strong>OTP:</strong> <span id="mOtp"></span></div>
+      </div>
+      <div id="mBody" class="mBody"></div>
+      <div class="row">
+        <button id="closeMsg" class="btn">Close</button>
+        <button id="downloadMsg" class="btn">Download .txt</button>
+      </div>
+    </section>
+
+    <footer class="foot">
+      <small>Using <a href="https://www.1secmail.com/" target="_blank" rel="noopener">1secmail API</a>. Some sites block disposable emails — not guaranteed for all OTP providers.</small>
+    </footer>
+  </main>
+
+  <script src="app.js"></script>
 </body>
 </html>
