@@ -1,38 +1,34 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>TempMail</title>
-  <link rel="stylesheet" href="style.css" />
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>TempMail (mail.tm)</title>
+<link rel="stylesheet" href="/style.css" />
 </head>
-
 <body>
-  <header>
-    <h1>TempMail</h1>
-    <button id="themeToggle">🌙</button>
-  </header>
+<header class="top">
+  <h1>TempMail</h1>
+  <button id="themeToggle" title="Toggle theme">🌙</button>
+</header>
 
-  <div class="card">
-    <button id="createBtn" class="btn-primary">Create mailbox</button>
-    <button id="deleteBtn" class="btn-danger">Delete mailbox</button>
-
-    <div style="margin-top:12px;">
+<main>
+  <div class="card controls">
+    <div class="row">
+      <button id="createBtn" class="primary">Create mailbox</button>
+      <button id="deleteBtn">Delete mailbox</button>
+    </div>
+    <div class="row">
       <button id="copyBtn">Copy address</button>
-
-      <label style="margin-left:15px;">
-        <input type="checkbox" id="pollCheckbox" checked />
-        Poll
-      </label>
-
+      <label><input id="pollCheckbox" type="checkbox" checked /> Poll</label>
       <button id="fetchBtn">Fetch</button>
     </div>
   </div>
 
-  <div id="infoBox" class="card" style="display:none;">
-    <p><b>Address:</b> <span id="address"></span></p>
-    <p><b>Password:</b> <span id="password"></span></p>
-    <p><b>Token:</b> <span id="token"></span></p>
+  <div class="card info" id="accountInfo" style="display:none;">
+    <div><strong>Address:</strong> <span id="address"></span></div>
+    <div><strong>Password:</strong> <span id="password"></span></div>
+    <div><strong>Token:</strong> <span id="token"></span></div>
   </div>
 
   <div class="card">
@@ -40,6 +36,9 @@
     <div id="messages">No messages.</div>
   </div>
 
-  <script src="app.js"></script>
+  <div class="toast" id="toast" style="display:none;"></div>
+</main>
+
+<script src="/app.js"></script>
 </body>
 </html>
