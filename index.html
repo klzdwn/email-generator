@@ -1,62 +1,45 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>TempMail - Inbox</title>
-  <link rel="stylesheet" href="./style.css" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TempMail</title>
+  <link rel="stylesheet" href="style.css" />
 </head>
-<body class="light">
-  <header class="topbar">
-    <div class="brand">TempMail</div>
-    <div class="controls">
-      <button id="themeToggle" aria-label="Toggle theme">🌙</button>
-    </div>
+
+<body>
+  <header>
+    <h1>TempMail</h1>
+    <button id="themeToggle">🌙</button>
   </header>
 
-  <main class="container">
-    <section class="card actions">
-      <div class="row">
-        <button id="createBtn" class="btn primary">Create mailbox</button>
-        <button id="deleteBtn" class="btn">Delete mailbox</button>
-      </div>
-      <div class="row small">
-        <button id="copyBtn" class="btn">Copy address</button>
-        <label class="checkbox"><input id="pollToggle" type="checkbox" checked/> Poll</label>
-        <button id="fetchBtn" class="btn">Fetch</button>
-      </div>
-    </section>
+  <div class="card">
+    <button id="createBtn" class="btn-primary">Create mailbox</button>
+    <button id="deleteBtn" class="btn-danger">Delete mailbox</button>
 
-    <section class="card mailbox-info" id="mailboxCard" hidden>
-      <div><strong>Address:</strong> <span id="addressTxt"></span></div>
-      <div><strong>Password:</strong> <span id="passwordTxt"></span></div>
-      <div><strong>Token:</strong> <span id="tokenTxt" class="token"></span></div>
-    </section>
+    <div style="margin-top:12px;">
+      <button id="copyBtn">Copy address</button>
 
-    <section class="card inbox-section">
-      <h3>Inbox</h3>
-      <div id="inboxList" class="inbox-list">
-        <div class="empty">No messages.</div>
-      </div>
-    </section>
+      <label style="margin-left:15px;">
+        <input type="checkbox" id="pollCheckbox" checked />
+        Poll
+      </label>
 
-    <section class="card preview-section" id="previewCard" hidden>
-      <div class="preview-header">
-        <div>
-          <strong id="previewSubject"></strong>
-          <div class="meta" id="previewFrom"></div>
-        </div>
-        <div class="actions-col">
-          <button id="extractOtpBtn" class="btn">Extract OTP</button>
-          <button id="copyBodyBtn" class="btn">Copy</button>
-        </div>
-      </div>
-      <div id="previewBody" class="preview-body"></div>
-    </section>
+      <button id="fetchBtn">Fetch</button>
+    </div>
+  </div>
 
-    <div id="toast" class="toast" hidden></div>
-  </main>
+  <div id="infoBox" class="card" style="display:none;">
+    <p><b>Address:</b> <span id="address"></span></p>
+    <p><b>Password:</b> <span id="password"></span></p>
+    <p><b>Token:</b> <span id="token"></span></p>
+  </div>
 
-  <script src="./app.js" type="module"></script>
+  <div class="card">
+    <h2>Inbox</h2>
+    <div id="messages">No messages.</div>
+  </div>
+
+  <script src="app.js"></script>
 </body>
 </html>
