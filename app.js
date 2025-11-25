@@ -1,116 +1,140 @@
-// app.js — client for mail.tm API via Vercel serverless
-
 const $ = s => document.querySelector(s);
+const createBtn = $('#createBtn');
+const deleteBtn = $('#deleteBtn');
+const copyBtn = $('#copyBtn');
+const fetchBtn = $('#fetchBtn');
+const pollCheckbox = $('#pollCheckbox');
+const addressEl = $('#address');
+const passwordEl = $('#password');
+const tokenEl = $('#token');
+const infoCard = $('#accountInfo');
+const messagesEl = $('#messages');
+const toastEl = $('#toast');
+const themeToggle = $('#themeToggle');
 
-// UI Elements
-const createBtn = $("#createBtn");
-const deleteBtn = $("#deleteBtn");
-const copyBtn = $("#copyBtn");
-const fetchBtn = $("#fetchBtn");
-const pollCheckbox = $("#pollCheckbox");
-
-const addressEl = $("#address");
-const passwordEl = $("#password");
-const tokenEl = $("#token");
-const messagesEl = $("#messages");
-
-let poller = null;
-
+let pollInterval = null;
 let current = {
-  address: localStorage.getItem("tm_address") || null,
-  password: localStorage.getItem("tm_password") || null,
-  token: localStorage.getItem("tm_token") || null,
+  address: localStorage.getItem('tm_address') || null,
+  password: localStorage.getItem('tm_password') || null,
+  token: localStorage.getItem('tm_token') || null
 };
 
-// Update UI
-function showInfo() {
-  if (!current.address) {
-    $("#infoBox").style.display = "none";
-    return;
-  }
-  $("#infoBox").style.display = "block";
-  addressEl.textContent = current.address;
-  passwordEl.textContent = current.password;
-  tokenEl.textContent = current.token;
+function showToast(txt){
+  toastEl.textContent = txt;
+  toastEl.style.display = 'block';
+  clearTimeout(toastEl._t);
+  toastEl._t = setTimeout(()=> toastEl.style.display='none', 3500);
 }
 
-// Fetch inbox
-async function loadMessages() {
-  if (!current.token) return;
-
-  const r = await fetch(`/api/messages?token=${encodeURIComponent(current.token)}`);
-  const j = await r.json();
-
-  if (!j.ok) {
-    messagesEl.innerHTML = "Error loading messages.";
-    return;
+function renderAccount(){
+  if(current.address){
+    infoCard.style.display = 'block';
+    addressEl.textContent = current.address;
+    passwordEl.textContent = current.password || '—';
+    tokenEl.textContent = current.token ? current.token.slice(0,30)+'...' : '—';
+  } else {
+    infoCard.style.display = 'none';
   }
-
-  if (!j.inbox.length) {
-    messagesEl.innerHTML = "No messages.";
-    return;
-  }
-
-  messagesEl.innerHTML = j.inbox
-    .map(
-      m => `
-      <div class="card">
-        <b>${m.from?.address || "(unknown)"}</b><br>
-        <b>${m.subject || "(no subject)"}</b><br><br>
-        <div>${m.intro || ""}</div>
-      </div>
-    `
-    )
-    .join("");
 }
 
-// CREATE MAILBOX
-createBtn.onclick = async () => {
-  const r = await fetch("/api/create", { method: "POST" });
-  const j = await r.json();
+async function createMailbox(){
+  showToast('Creating mailbox...');
+  try{
+    const res = await fetch('/api/create', { method:'POST' });
+    const data = await res.json();
+    if(!res.ok){
+      showToast('Create failed: ' + (data?.error || res.statusText));
+      console.error('create failed', data);
+      return;
+    }
+    current.address = data.address;
+    current.password = data.password;
+    current.token = data.token;
+    localStorage.setItem('tm_address', current.address);
+    localStorage.setItem('tm_password', current.password);
+    localStorage.setItem('tm_token', current.token);
+    renderAccount();
+    showToast('Mailbox created');
+    fetchMessages();
+    if(pollCheckbox.checked){
+      startPolling();
+    }
+  }catch(err){
+    console.error(err);
+    showToast('Create failed: ' + err.message);
+  }
+}
 
-  if (!j.ok) return alert("Create failed:\n" + j.error);
+async function deleteMailbox(){
+  localStorage.removeItem('tm_address');
+  localStorage.removeItem('tm_password');
+  localStorage.removeItem('tm_token');
+  current = {address:null,password:null,token:null};
+  renderAccount();
+  showToast('Local mailbox removed');
+  stopPolling();
+  messagesEl.innerHTML='No messages.';
+}
 
-  current.address = j.address;
-  current.password = j.password;
-  current.token = j.token;
+async function fetchMessages(){
+  messagesEl.innerHTML = 'Loading...';
+  if(!current.token){ messagesEl.innerHTML='No token. Create mailbox first.'; return; }
+  try{
+    const res = await fetch('/api/messages', {
+      headers: { 'authorization': 'Bearer ' + current.token }
+    });
+    const body = await res.json();
+    if(!res.ok){
+      messagesEl.innerHTML = 'Error loading messages.';
+      console.error('messages error', body);
+      showToast('Error loading messages: ' + (body?.error || res.statusText));
+      return;
+    }
+    if(!body?.hydra: && !body?.hydra && Array.isArray(body) === false && body['hydra:member']){
+      // new format
+    }
+    const list = body['hydra:member'] || body['items'] || body.results || body; // be resilient
+    if(!list || list.length === 0){ messagesEl.innerHTML='No messages.'; return; }
+    messagesEl.innerHTML = '';
+    for(const m of list){
+      const div = document.createElement('div');
+      div.className = 'msg';
+      div.innerHTML = `<div><strong>${m.subject||'(no subject)'}</strong></div>
+                       <div style="font-size:12px;color:gray">${m.from?.address || m.from?.name || ''} — ${new Date(m.createdAt||m.created || m.date).toLocaleString()}</div>
+                       <div style="margin-top:8px">${(m.intro || m.text || m.body || '')}</div>`;
+      messagesEl.appendChild(div);
+    }
+  }catch(err){
+    console.error(err);
+    messagesEl.innerHTML = 'Error loading messages.';
+    showToast('Fetch messages failed: ' + err.message);
+  }
+}
 
-  localStorage.setItem("tm_address", j.address);
-  localStorage.setItem("tm_password", j.password);
-  localStorage.setItem("tm_token", j.token);
+function startPolling(){
+  stopPolling();
+  pollInterval = setInterval(fetchMessages, 5000);
+}
+function stopPolling(){
+  if(pollInterval){ clearInterval(pollInterval); pollInterval = null; }
+}
 
-  showInfo();
-  loadMessages();
-};
+createBtn.addEventListener('click', createMailbox);
+deleteBtn.addEventListener('click', deleteMailbox);
+fetchBtn.addEventListener('click', fetchMessages);
+copyBtn.addEventListener('click', ()=>{
+  if(current.address) navigator.clipboard?.writeText(current.address).then(()=>showToast('Copied'));
+});
 
-// DELETE MAILBOX (local delete only)
-deleteBtn.onclick = () => {
-  localStorage.clear();
-  current = { address: null, password: null, token: null };
-  showInfo();
-  messagesEl.innerHTML = "No messages.";
-};
+pollCheckbox.addEventListener('change', ()=>{
+  if(pollCheckbox.checked) startPolling(); else stopPolling();
+});
 
-// COPY ADDRESS
-copyBtn.onclick = () => {
-  if (!current.address) return;
-  navigator.clipboard.writeText(current.address);
-  alert("Copied: " + current.address);
-};
+themeToggle.addEventListener('click', ()=>{
+  const currentTheme = document.documentElement.getAttribute('data-theme');
+  if(currentTheme === 'dark'){ document.documentElement.removeAttribute('data-theme'); themeToggle.textContent='🌙'; }
+  else { document.documentElement.setAttribute('data-theme','dark'); themeToggle.textContent='☀️'; }
+});
 
-// MANUAL FETCH
-fetchBtn.onclick = loadMessages;
-
-// AUTO POLLING
-setInterval(() => {
-  if (pollCheckbox.checked) loadMessages();
-}, 4000);
-
-// Theme toggle
-$("#themeToggle").onclick = () => {
-  document.body.classList.toggle("dark");
-};
-
-// initial display
-showInfo();
-if (current.token) loadMessages();
+renderAccount();
+if(current.token && pollCheckbox.checked) startPolling();
